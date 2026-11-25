@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { buyAction } from "@/app/actions";
+import { ClientRefInput } from "@/components/ClientRefInput";
 import { fmtMoney, discountOf, type Cur } from "@/lib/moneyfmt";
 import { normOptions } from "@/lib/fieldopts";
 import { fieldLabel, fieldPlaceholder } from "@/lib/fieldlabels";
@@ -61,6 +62,7 @@ export default function BuyPanel({ slug, cover, packages, fields, methodFields, 
 
   return (
     <form action={buyAction} className="buy-layout">
+        <ClientRefInput />
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="packageId" value={activePkg?.id ?? ""} />
       <div>

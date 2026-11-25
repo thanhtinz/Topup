@@ -28,7 +28,7 @@ export async function setupAdminAction(formData: FormData) {
   });
   const store = await cookies();
   store.set(SESSION_COOKIE_NAME, makeSessionToken(user.id, user.role), {
-    httpOnly: true, sameSite: "lax", path: "/", maxAge: 30 * 24 * 3600,
+    httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 24 * 3600,
   });
   redirect("/admin");
 }

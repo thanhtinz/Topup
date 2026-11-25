@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { buyTelegramAction } from "@/app/actions";
+import { ClientRefInput } from "@/components/ClientRefInput";
 import { fmtMoney, type Cur } from "@/lib/moneyfmt";
 import type { TelegramPackageView } from "@/lib/telegram";
 
@@ -96,6 +97,7 @@ export default function Telegram({
 
   return (
     <form action={buyTelegramAction} className="buy-layout">
+        <ClientRefInput />
       <input type="hidden" name="kind" value={tab} />
       <input type="hidden" name="itemKey" value={activePkg?.itemKey ?? ""} />
       <div>

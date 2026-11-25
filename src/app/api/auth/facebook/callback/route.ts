@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   if (!user.active) return fail("Tài khoản đã bị khoá");
   const res = NextResponse.redirect(new URL("/account", req.url));
   res.cookies.set(SESSION_COOKIE_NAME, makeSessionToken(user.id, user.role), {
-    httpOnly: true, sameSite: "lax", path: "/", maxAge: 30 * 24 * 3600,
+    httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 24 * 3600,
   });
   res.cookies.delete("fb_oauth_state");
   return res;

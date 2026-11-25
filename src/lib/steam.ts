@@ -2,7 +2,7 @@ import { prisma } from "./db";
 import { getSettings, audit } from "./settings";
 import { applyBalance } from "./wallet";
 import { fulfillSteamTopup } from "./providers";
-import { newOrderCode } from "./orders";
+import { newOrderCode, failOrderWithRefund } from "./orders";
 
 export const STEAM_SLUG = "steam-top-up";
 export const STEAM_NAME = "Steam Top-Up (CIS)";
@@ -86,7 +86,11 @@ export async function ensureSteamCatalog() {
   return { game, pkg: created };
 }
 
-export async function buySteamTopup(input: { userId: number; login: string; amountCents: number }) {
+export async function buySteamTopup(input: { userId: number; login: string; amountCents: number; clientRef?: string }) {
+  if (input.clientRef) {
+    const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+    if (dup) return dup;
+  }
   const cfg = await steamConfig();
   if (!cfg.enabled) throw new Error("STEAM_UNAVAILABLE");
   const login = input.login.trim().slice(0, 64);
@@ -99,7 +103,7 @@ export async function buySteamTopup(input: { userId: number; login: string; amou
   const gross = Math.ceil((cfg.unitPriceCents * input.amountCents) / 100);
   const amountUsd = (input.amountCents / 100).toFixed(2);
 
-  const order = await prisma.$transaction(async (tx) => {
+  const runTx = () => prisma.$transaction(async (tx) => {
     await applyBalance(tx, input.userId, -gross, "purchase", undefined, `Nạp Steam ${amountUsd} USD`);
     const created = await tx.order.create({
       data: {
@@ -107,6 +111,7 @@ export async function buySteamTopup(input: { userId: number; login: string; amou
         userId: input.userId,
         gameId: game.id,
         totalCents: gross,
+        clientRef: input.clientRef ?? null,
         status: "PROCESSING",
         items: {
           create: {
@@ -124,23 +129,36 @@ export async function buySteamTopup(input: { userId: number; login: string; amou
     await tx.game.update({ where: { id: game.id }, data: { soldCount: { increment: 1 } } });
     return { ...created, code };
   });
+  let order;
+  try {
+    order = await runTx();
+  } catch (e) {
+    if (input.clientRef && (e as { code?: string })?.code === "P2002") {
+      const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+      if (dup) return dup;
+    }
+    throw e;
+  }
+
 
   const result = await fulfillSteamTopup(order.code, 1, login, input.amountCents);
   await prisma.orderItem.updateMany({
     where: { orderId: order.id },
     data: { status: result.status === "DELIVERED" ? "DELIVERED" : result.status === "FAILED" ? "FAILED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined },
   });
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { status: result.status === "DELIVERED" ? "DELIVERED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined, note: result.status === "PENDING" ? `Đối soát tay: ${result.reason}` : undefined },
-  });
   const { notifyUser } = await import("./notify");
-  if (result.status === "DELIVERED") {
-    const { awardCreatorCommissionForOrder } = await import("./creator");
-    await awardCreatorCommissionForOrder(order.id);
-    await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} đã nạp thành công vào tài khoản Steam của bạn.`, "/account/orders");
-  } else if (result.status === "FAILED") {
-    await notifyUser(input.userId, "ORDER", "Đơn hàng thất bại", `Đơn ${order.code} không nạp được. Số tiền sẽ được xử lý theo chính sách hoàn tiền.`, "/account/orders");
+  if (result.status === "FAILED") {
+    await failOrderWithRefund(order.id, input.userId, order.code);
+  } else {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { status: result.status === "DELIVERED" ? "DELIVERED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined, note: result.status === "PENDING" ? `Đối soát tay: ${result.reason}` : undefined },
+    });
+    if (result.status === "DELIVERED") {
+      const { awardCreatorCommissionForOrder } = await import("./creator");
+      await awardCreatorCommissionForOrder(order.id);
+      await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} đã nạp thành công vào tài khoản Steam của bạn.`, "/account/orders");
+    }
   }
   await audit(input.userId, "order.create", `${order.code} STEAM ${amountUsd} USD ${gross}`);
   return order;

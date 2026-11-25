@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { unstable_rethrow } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireOwner } from "@/lib/auth";
 import { audit, setSetting } from "@/lib/settings";
 import { creatorConfig, markPayoutPaid } from "@/lib/creator";
 import { notifyUser } from "@/lib/notify";
@@ -45,7 +45,7 @@ export async function updateCreatorAction(formData: FormData) {
 }
 
 export async function addAdjustmentAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const creatorId = Number(formData.get("creatorId"));
   const amountUsd = parseFloat(String(formData.get("amount") ?? "0"));
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 300);
@@ -97,7 +97,7 @@ export async function toggleCouponAction(formData: FormData) {
 }
 
 export async function saveLevelAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id") ?? 0);
   const name = String(formData.get("name") ?? "").trim().slice(0, 40);
   const rateBps = Math.round(parseFloat(String(formData.get("rate") ?? "0")) * 100);
@@ -111,7 +111,7 @@ export async function saveLevelAction(formData: FormData) {
 }
 
 export async function deleteLevelAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const used = await prisma.creator.count({ where: { levelId: id } });
   if (used > 0) back("/admin/partnership/affiliate/levels", undefined, `Còn ${used} Affiliate ở cấp này — không xoá được`);
@@ -121,7 +121,7 @@ export async function deleteLevelAction(formData: FormData) {
 }
 
 export async function decidePayoutAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const kind = String(formData.get("kind") ?? "");
   if (!["approve", "process", "paid", "reject"].includes(kind)) back("/admin/partnership/affiliate/payouts", undefined, "Thao tác tiền không rõ ràng — đã chặn");
@@ -151,7 +151,7 @@ export async function decidePayoutAction(formData: FormData) {
 }
 
 export async function decideCommissionAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const kind = String(formData.get("kind") ?? "");
   if (kind !== "reverse" && kind !== "restore") back("/admin/partnership/affiliate/commissions", undefined, "Thao tác không rõ ràng — đã chặn");
@@ -234,7 +234,7 @@ export async function deleteMediaAction(formData: FormData) {
 }
 
 export async function saveCreatorSettingsAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const days = (k: string, dflt: number, min: number, max: number) => {
     const v = parseInt(String(formData.get(k) ?? ""), 10);
     return String(Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : dflt);

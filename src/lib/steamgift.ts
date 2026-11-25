@@ -2,7 +2,7 @@ import { prisma } from "./db";
 import { getSettings, setSetting, audit } from "./settings";
 import { applyBalance } from "./wallet";
 import { fzrGiftOffers, fzrGiftGamesList, fulfillSteamGift, type FzrGiftOffer } from "./providers";
-import { newOrderCode } from "./orders";
+import { newOrderCode, failOrderWithRefund } from "./orders";
 
 export const GIFT_SLUG = "steam-gift";
 export const GIFT_NAME = "Steam Gift Game";
@@ -128,7 +128,11 @@ export async function syncGiftCatalog(
   return { count: rows.length, total };
 }
 
-export async function buySteamGift(input: { userId: number; appid: number; subId: string; region: string; inviteUrl: string }) {
+export async function buySteamGift(input: { userId: number; appid: number; subId: string; region: string; inviteUrl: string; clientRef?: string }) {
+  if (input.clientRef) {
+    const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+    if (dup) return dup;
+  }
   const cfg = await giftConfig();
   if (!cfg.enabled) throw new Error("GIFT_UNAVAILABLE");
   const invite = input.inviteUrl.trim().slice(0, 300);
@@ -147,7 +151,7 @@ export async function buySteamGift(input: { userId: number; appid: number; subId
 
   const { game, pkg } = await ensureGiftCatalog();
   if (!game.active) throw new Error("GIFT_UNAVAILABLE");
-  const order = await prisma.$transaction(async (tx) => {
+  const runTx = () => prisma.$transaction(async (tx) => {
     await applyBalance(tx, input.userId, -gross, "purchase", undefined, `Tặng game Steam ${cat.name}`);
     const created = await tx.order.create({
       data: {
@@ -155,6 +159,7 @@ export async function buySteamGift(input: { userId: number; appid: number; subId
         userId: input.userId,
         gameId: game.id,
         totalCents: gross,
+        clientRef: input.clientRef ?? null,
         status: "PROCESSING",
         items: {
           create: {
@@ -179,23 +184,36 @@ export async function buySteamGift(input: { userId: number; appid: number; subId
     await tx.game.update({ where: { id: game.id }, data: { soldCount: { increment: 1 } } });
     return { ...created, code };
   });
+  let order;
+  try {
+    order = await runTx();
+  } catch (e) {
+    if (input.clientRef && (e as { code?: string })?.code === "P2002") {
+      const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+      if (dup) return dup;
+    }
+    throw e;
+  }
+
 
   const result = await fulfillSteamGift(order.code, 1, { inviteUrl: invite, subId: input.subId, appId: input.appid, region: input.region });
   await prisma.orderItem.updateMany({
     where: { orderId: order.id },
     data: { status: result.status === "DELIVERED" ? "DELIVERED" : result.status === "FAILED" ? "FAILED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined },
   });
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { status: result.status === "DELIVERED" ? "DELIVERED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined, note: result.status === "PENDING" ? `Đối soát tay: ${result.reason}` : undefined },
-  });
   const { notifyUser } = await import("./notify");
-  if (result.status === "DELIVERED") {
-    const { awardCreatorCommissionForOrder } = await import("./creator");
-    await awardCreatorCommissionForOrder(order.id);
-    await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} — game Steam đã được gửi tới tài khoản nhận.`, "/account/orders");
-  } else if (result.status === "FAILED") {
-    await notifyUser(input.userId, "ORDER", "Đơn hàng thất bại", `Đơn ${order.code} không gửi được quà Steam. Số tiền sẽ được xử lý theo chính sách hoàn tiền.`, "/account/orders");
+  if (result.status === "FAILED") {
+    await failOrderWithRefund(order.id, input.userId, order.code);
+  } else {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { status: result.status === "DELIVERED" ? "DELIVERED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined, note: result.status === "PENDING" ? `Đối soát tay: ${result.reason}` : undefined },
+    });
+    if (result.status === "DELIVERED") {
+      const { awardCreatorCommissionForOrder } = await import("./creator");
+      await awardCreatorCommissionForOrder(order.id);
+      await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} — game Steam đã được gửi tới tài khoản nhận.`, "/account/orders");
+    }
   }
   await audit(input.userId, "order.create", `${order.code} STEAMGIFT ${cat.name} appid=${input.appid} sub=${input.subId} ${input.region} usd=${regionRow.priceUsd} ${gross}`);
   return order;

@@ -53,9 +53,10 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 export async function applyPoints(tx: Tx, userId: number, delta: number, kind: string, ref?: string, note?: string) {
   if (delta === 0) return 0;
-  const user = await tx.user.findUnique({ where: { id: userId }, select: { points: true } });
-  if (!user) throw new Error("USER_NOT_FOUND");
-  if (delta < 0 && user.points + delta < 0) throw new Error("POINTS_INSUFFICIENT");
+  const rows = await tx.$queryRaw<Array<{ points: number }>>`
+    SELECT "points" FROM "User" WHERE id = ${userId} FOR UPDATE`;
+  if (!rows.length) throw new Error("USER_NOT_FOUND");
+  if (delta < 0 && rows[0].points + delta < 0) throw new Error("POINTS_INSUFFICIENT");
   const updated = await tx.user.update({
     where: { id: userId },
     data: {

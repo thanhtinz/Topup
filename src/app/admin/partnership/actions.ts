@@ -5,7 +5,7 @@ import { unstable_rethrow } from "next/navigation";
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireOwner } from "@/lib/auth";
 import { audit, setSetting } from "@/lib/settings";
 import { notifyUser } from "@/lib/notify";
 import { isMailConfigured, sendMail } from "@/lib/mailer";
@@ -366,7 +366,7 @@ export async function saveAgreementAction(formData: FormData) {
 }
 
 export async function savePartnerPaymentAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const partnerId = Number(formData.get("partnerId"));
   const amountCents = money(formData, "amount");
   if (!partnerId || amountCents <= 0) back("/admin/partnership/payments", undefined, "Thiếu Partner hoặc số tiền không hợp lệ");
@@ -395,7 +395,7 @@ export async function savePartnerPaymentAction(formData: FormData) {
 }
 
 export async function partnerPaymentFlowAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const kind = String(formData.get("kind") ?? "");
   const map: Record<string, string> = { submit: "PENDING_APPROVAL", approve: "APPROVED", process: "PROCESSING", paid: "PAID", fail: "FAILED", cancel: "CANCELLED" };
@@ -429,7 +429,7 @@ export async function partnerPaymentFlowAction(formData: FormData) {
 }
 
 export async function savePartnerSettingsAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const methods = ["USDT", "BANK", "PAYPAL"].filter((m) => String(formData.get(`m_${m}`) ?? "") === "1");
   if (methods.length === 0) back("/admin/partnership/settings", undefined, "Cần bật ít nhất một phương thức chi trả");
   await setSetting("partner_payment_methods", methods.join(","));

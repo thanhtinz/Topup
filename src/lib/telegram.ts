@@ -2,7 +2,7 @@ import { prisma } from "./db";
 import { getSettings, setSetting, audit } from "./settings";
 import { applyBalance } from "./wallet";
 import { fzrTelegramStarsQuote, fzrTelegramPremiumPlans, fulfillTelegramStars, fulfillTelegramPremium, type FulfillResult } from "./providers";
-import { newOrderCode } from "./orders";
+import { newOrderCode, failOrderWithRefund } from "./orders";
 
 export const TG_SLUG = "telegram";
 export const TG_NAME = "Telegram";
@@ -131,7 +131,12 @@ export async function buyTelegram(input: {
   itemKey: string;
   quantity: number;
   username: string;
+  clientRef?: string;
 }) {
+  if (input.clientRef) {
+    const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+    if (dup) return dup;
+  }
   const cfg = await telegramConfig();
   if (!cfg.enabled) throw new Error("TG_UNAVAILABLE");
   const username = normalizeTgUsername(input.username || "");
@@ -169,7 +174,7 @@ export async function buyTelegram(input: {
   }
 
   const itemName = input.kind === "stars" ? `${starsTotal.toLocaleString("en-US")} Sao Telegram` : `Telegram Premium ${months} tháng`;
-  const order = await prisma.$transaction(async (tx) => {
+  const runTx = () => prisma.$transaction(async (tx) => {
     await applyBalance(tx, input.userId, -gross, "purchase", undefined, `Mua ${itemName} cho @${username}`);
     const created = await tx.order.create({
       data: {
@@ -177,6 +182,7 @@ export async function buyTelegram(input: {
         userId: input.userId,
         gameId: game.id,
         totalCents: gross,
+        clientRef: input.clientRef ?? null,
         status: "PROCESSING",
         items: {
           create: {
@@ -194,14 +200,28 @@ export async function buyTelegram(input: {
     await tx.game.update({ where: { id: game.id }, data: { soldCount: { increment: 1 } } });
     return { ...created, code };
   });
+  let order;
+  try {
+    order = await runTx();
+  } catch (e) {
+    if (input.clientRef && (e as { code?: string })?.code === "P2002") {
+      const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+      if (dup) return dup;
+    }
+    throw e;
+  }
+
 
   let result: FulfillResult;
+  let placedUnits = 0;
   if (input.kind === "stars") {
     result = await fulfillTelegramStars(order.code, 1, { username, quantity: starsTotal });
+    if (result.status === "DELIVERED" || result.status === "PROCESSING") placedUnits = 1;
   } else {
     result = { status: "DELIVERED" };
     for (let i = 1; i <= qty; i++) {
       const r = await fulfillTelegramPremium(order.code, i, { username, months });
+      if (r.status === "DELIVERED" || r.status === "PROCESSING") placedUnits++;
       if (r.status === "FAILED") { result = r; break; }
       if (r.status === "PENDING") { result = r; break; }
       if (r.status === "PROCESSING") result = r;
@@ -212,17 +232,21 @@ export async function buyTelegram(input: {
     where: { orderId: order.id },
     data: { status: result.status === "DELIVERED" ? "DELIVERED" : result.status === "FAILED" ? "FAILED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined },
   });
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { status: result.status === "DELIVERED" ? "DELIVERED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined, note: result.status === "PENDING" ? `Đối soát tay: ${result.reason}` : undefined },
-  });
   const { notifyUser } = await import("./notify");
-  if (result.status === "DELIVERED") {
-    const { awardCreatorCommissionForOrder } = await import("./creator");
-    await awardCreatorCommissionForOrder(order.id);
-    await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} — ${itemName} đã được gửi tới @${username}.`, "/account/orders");
-  } else if (result.status === "FAILED") {
-    await notifyUser(input.userId, "ORDER", "Đơn hàng thất bại", `Đơn ${order.code} không thực hiện được. Số tiền sẽ được xử lý theo chính sách hoàn tiền.`, "/account/orders");
+  if (result.status === "FAILED" && placedUnits === 0) {
+    await failOrderWithRefund(order.id, input.userId, order.code);
+  } else {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { status: result.status === "DELIVERED" ? "DELIVERED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined, note: result.status === "PENDING" ? `Đối soát tay: ${result.reason}` : result.status === "FAILED" ? `Đối soát tay: giao một phần ${placedUnits}/${qty}` : undefined },
+    });
+    if (result.status === "DELIVERED") {
+      const { awardCreatorCommissionForOrder } = await import("./creator");
+      await awardCreatorCommissionForOrder(order.id);
+      await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} — ${itemName} đã được gửi tới @${username}.`, "/account/orders");
+    } else if (result.status === "FAILED") {
+      await notifyUser(input.userId, "ORDER", "Đơn hàng giao một phần", `Đơn ${order.code} mới giao được một phần. Phần còn lại đang được xử lý.`, "/account/orders");
+    }
   }
   await audit(input.userId, "order.create", `${order.code} TELEGRAM ${input.kind} ${itemName} @${username} usd=${usdUnit} ${gross}`);
   return order;

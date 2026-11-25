@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { buySteamAction } from "@/app/actions";
+import { ClientRefInput } from "@/components/ClientRefInput";
 import { fmtMoney, type Cur } from "@/lib/moneyfmt";
 
 type Props = {
@@ -69,6 +70,7 @@ export default function SteamTopup(p: Props) {
 
   return (
     <form action={buySteamAction} className="steam-wrap">
+        <ClientRefInput />
       <div className="steam-head">
         <h1>Steam Top-Up (CIS)</h1>
         <p>{T.headSub}</p>

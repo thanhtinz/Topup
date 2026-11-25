@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { buySteamGiftAction } from "@/app/actions";
+import { ClientRefInput } from "@/components/ClientRefInput";
 import { fmtMoney, type Cur } from "@/lib/moneyfmt";
 
 export type GiftGameCard = { appid: number; name: string; image: string };
@@ -372,6 +373,7 @@ export default function SteamGift(p: Props) {
 
         <aside>
           <form action={buySteamGiftAction} className="gift-card gift-summary">
+        <ClientRefInput />
             <input type="hidden" name="appid" value={game.appid} />
             <input type="hidden" name="subId" value={offer ? String(offer.subId) : ""} />
             <input type="hidden" name="region" value={regionRow?.region || ""} />

@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { applyBalance } from "./wallet";
-import { fulfillWithProvider } from "./providers";
+import { fulfillWithProvider, type FulfillResult } from "./providers";
 import { audit } from "./settings";
 import { gameVisible } from "./visibility";
 import { pointsConfig, maxUsablePoints, applyPoints, getVipTiers, resolveTier, spend30dCents } from "./points";
@@ -25,6 +25,10 @@ export type BuyInput = {
 };
 
 export async function buyPackage(input: BuyInput) {
+  if (input.clientRef) {
+    const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+    if (dup) return dup;
+  }
   const qty = Math.min(10, Math.max(1, Math.floor(input.qty || 1)));
   const pkg = await prisma.package.findUnique({ where: { id: input.packageId }, include: { game: true } });
   if (!pkg || !pkg.active || !pkg.game.active) throw new Error("PACKAGE_UNAVAILABLE");
@@ -38,7 +42,7 @@ export async function buyPackage(input: BuyInput) {
   }
 
   let discountCents = 0;
-  let promo: { id: number; code: string } | null = null;
+  let promo: { id: number; code: string; maxUses: number | null } | null = null;
   const flash = await liveFlashForPackage(pkg.id);
   const unitPrice = flash && flash.salePriceCents < pkg.priceCents ? flash.salePriceCents : pkg.priceCents;
   const activeFlash = unitPrice < pkg.priceCents ? flash : null;
@@ -65,7 +69,7 @@ export async function buyPackage(input: BuyInput) {
       if (found.minOrderCents && gross < found.minOrderCents) throw new Error("PROMO_INVALID");
       discountCents = Math.floor(((gross - vipDiscountCents) * found.percent) / 100);
       if (found.maxDiscountCents) discountCents = Math.min(discountCents, found.maxDiscountCents);
-      promo = { id: found.id, code: found.code };
+      promo = { id: found.id, code: found.code, maxUses: found.maxUses };
       if (found.creatorId) {
         const { setAttribution } = await import("./creator");
         await setAttribution(input.userId, found.creatorId, null, "COUPON").catch(() => undefined);
@@ -84,7 +88,7 @@ export async function buyPackage(input: BuyInput) {
   }
   const total = gross - vipDiscountCents - discountCents - pointsToUse;
 
-  const order = await prisma.$transaction(async (tx) => {
+  const runTx = () => prisma.$transaction(async (tx) => {
     if (activeFlash) {
       if (activeFlash.stockLimit != null) {
         const inc = await tx.flashSaleItem.updateMany({
@@ -94,6 +98,17 @@ export async function buyPackage(input: BuyInput) {
         if (inc.count === 0) throw new Error("FLASH_SOLD_OUT");
       } else {
         await tx.flashSaleItem.update({ where: { id: activeFlash.itemId }, data: { soldCount: { increment: qty } } });
+      }
+    }
+    if (promo) {
+      if (promo.maxUses != null) {
+        const claim = await tx.discountCode.updateMany({
+          where: { id: promo.id, usedCount: { lt: promo.maxUses } },
+          data: { usedCount: { increment: 1 } },
+        });
+        if (claim.count === 0) throw new Error("PROMO_INVALID");
+      } else {
+        await tx.discountCode.update({ where: { id: promo.id }, data: { usedCount: { increment: 1 } } });
       }
     }
     await applyBalance(tx, input.userId, -total, "purchase", undefined, `Mua ${pkg.name} x${qty}`);
@@ -116,32 +131,57 @@ export async function buyPackage(input: BuyInput) {
     const code = newOrderCode(created.id);
     await tx.order.update({ where: { id: created.id }, data: { code } });
     if (pointsToUse > 0) await applyPoints(tx, input.userId, -pointsToUse, "SPEND", code, "Dùng điểm thanh toán đơn " + code);
-    if (promo) await tx.discountCode.update({ where: { id: promo.id }, data: { usedCount: { increment: 1 } } });
     await tx.game.update({ where: { id: pkg.gameId }, data: { soldCount: { increment: qty } } });
     return { ...created, code };
   });
+  let order;
+  try {
+    order = await runTx();
+  } catch (e) {
+    if (input.clientRef && (e as { code?: string })?.code === "P2002") {
+      const dup = await prisma.order.findUnique({ where: { userId_clientRef: { userId: input.userId, clientRef: input.clientRef } } });
+      if (dup) return dup;
+    }
+    throw e;
+  }
 
   if (pkg.provider === "FZR" || pkg.provider === "ERIS") {
     const blocked =
       (pkg.game.priority === "ERIS_ONLY" && pkg.provider !== "ERIS") ||
       (pkg.game.priority === "FZR_ONLY" && pkg.provider !== "FZR");
     if (!blocked) {
-      const result = await fulfillWithProvider(pkg.provider, order.code, 1, pkg, sanitizeFields({ fieldsJson: gameFields }, input.fields));
+      const fields = sanitizeFields({ fieldsJson: gameFields }, input.fields);
+      const outcomes: FulfillResult[] = [];
+      for (let i = 1; i <= qty; i++) {
+        const r = await fulfillWithProvider(pkg.provider, order.code, i, pkg, fields);
+        outcomes.push(r);
+        if (r.status === "FAILED" || r.status === "PENDING") break;
+      }
+      const delivered = outcomes.filter((o) => o.status === "DELIVERED").length;
+      const placed = outcomes.filter((o) => o.status === "DELIVERED" || o.status === "PROCESSING").length;
+      const failedCount = outcomes.filter((o) => o.status === "FAILED").length;
+      const ambiguous = outcomes.some((o) => o.status === "PENDING");
+      const lastRef = [...outcomes].reverse().map((o) => (o.status === "DELIVERED" || o.status === "PROCESSING" ? o.providerRef : undefined)).find(Boolean);
+      const itemStatus = failedCount > 0 && placed === 0 && !ambiguous ? "FAILED" : failedCount > 0 ? "PARTIAL" : delivered === qty ? "DELIVERED" : "PROCESSING";
       await prisma.orderItem.updateMany({
         where: { orderId: order.id },
-        data: { status: result.status === "DELIVERED" ? "DELIVERED" : result.status === "FAILED" ? "FAILED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined },
+        data: { status: itemStatus, providerRef: lastRef },
       });
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: result.status === "DELIVERED" ? "DELIVERED" : "PROCESSING", providerRef: "providerRef" in result ? result.providerRef : undefined, note: result.status === "PENDING" ? `Đối soát tay: ${result.reason}` : undefined },
-      });
-      if (result.status === "DELIVERED") {
-        await awardCreatorCommissionForOrder(order.id);
-        const { notifyUser } = await import("./notify");
-        await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} đã nạp thành công vào tài khoản game của bạn.`, "/account/orders");
-      } else if (result.status === "FAILED") {
-        const { notifyUser } = await import("./notify");
-        await notifyUser(input.userId, "ORDER", "Đơn hàng thất bại", `Đơn ${order.code} không nạp được. Số tiền sẽ được xử lý theo chính sách hoàn tiền.`, "/account/orders");
+      if (failedCount > 0 && placed === 0 && !ambiguous) {
+        await failOrderWithRefund(order.id, input.userId, order.code);
+      } else if (failedCount > 0 && !ambiguous) {
+        await partialRefund(order, placed, qty);
+      } else {
+        const pendingReason = outcomes.find((o) => o.status === "PENDING")?.reason;
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: delivered === qty ? "DELIVERED" : "PROCESSING", providerRef: lastRef, note: pendingReason ? `Đối soát tay: ${pendingReason}` : undefined },
+        });
+        if (delivered === qty) {
+          await awardCreatorCommissionForOrder(order.id);
+          const { notifyUser } = await import("./notify");
+          await notifyUser(input.userId, "ORDER", "Đơn hàng đã giao", `Đơn ${order.code} đã nạp thành công vào tài khoản game của bạn.`, "/account/orders");
+        }
       }
     } else {
       await prisma.order.update({ where: { id: order.id }, data: { note: "Chờ admin: nguồn của gói bị khoá theo chế độ game" } });
@@ -162,6 +202,7 @@ export function sanitizeFields(game: { fieldsJson: unknown }, fields: Record<str
 
 export async function refundOrder(orderId: number) {
   const done = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
     const order = await tx.order.findUnique({ where: { id: orderId } });
     if (!order) throw new Error("ORDER_NOT_FOUND");
     if (order.status === "REFUNDED" || order.status === "DELIVERED") throw new Error("ORDER_NOT_REFUNDABLE");
@@ -180,4 +221,38 @@ export async function refundOrder(orderId: number) {
   const { fmtUSD } = await import("./money");
   await notifyUser(done.userId, "REFUND", "Đơn hàng đã hoàn tiền", `${fmtUSD(done.totalCents)} của đơn ${done.code} đã hoàn về ví của bạn.`, "/account/orders");
   return done;
+}
+
+async function partialRefund(order: { id: number; userId: number; code: string; totalCents: number; pointsUsed: number }, placed: number, qty: number) {
+  const kept = Math.floor((order.totalCents * placed) / qty);
+  const refundCents = order.totalCents - kept;
+  const pointsRefund = order.pointsUsed - Math.floor((order.pointsUsed * placed) / qty);
+  await prisma.$transaction(async (tx) => {
+    if (refundCents > 0) await applyBalance(tx, order.userId, refundCents, "refund", order.code, "Hoàn phần chưa giao đơn " + order.code, true);
+    if (pointsRefund > 0) await applyPoints(tx, order.userId, pointsRefund, "REFUND_RETURN", order.code, "Hoàn điểm phần chưa giao đơn " + order.code);
+    await tx.order.update({ where: { id: order.id }, data: { status: "PARTIAL", note: `Giao một phần ${placed}/${qty} — đã hoàn phần chưa giao` } });
+  });
+  const failedUnits = qty - placed;
+  const flashItems = await prisma.orderItem.findMany({ where: { orderId: order.id, flashItemId: { not: null } }, select: { flashItemId: true } });
+  for (const fi of flashItems) {
+    const cur = await prisma.flashSaleItem.findUnique({ where: { id: fi.flashItemId! }, select: { soldCount: true } });
+    if (cur) await prisma.flashSaleItem.update({ where: { id: fi.flashItemId! }, data: { soldCount: Math.max(0, cur.soldCount - failedUnits) } });
+  }
+  const { notifyUser } = await import("./notify");
+  const { fmtUSD } = await import("./money");
+  await notifyUser(order.userId, "ORDER", "Đơn hàng giao một phần", `Đơn ${order.code} đã giao ${placed}/${qty}. ${fmtUSD(refundCents)} phần chưa giao đã hoàn về ví của bạn.`, "/account/orders");
+}
+
+export async function failOrderWithRefund(orderId: number, userId: number, code: string) {
+  const claim = await prisma.order.updateMany({
+    where: { id: orderId, status: { notIn: ["REFUNDED", "DELIVERED"] } },
+    data: { status: "FAILED" },
+  });
+  if (claim.count === 0) return;
+  try {
+    await refundOrder(orderId);
+  } catch {
+    const { notifyUser } = await import("./notify");
+    await notifyUser(userId, "ORDER", "Đơn hàng thất bại", `Đơn ${code} không thực hiện được. Số tiền sẽ được xử lý theo chính sách hoàn tiền.`, "/account/orders");
+  }
 }

@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireOwner } from "@/lib/auth";
 import { setSetting, audit } from "@/lib/settings";
 import { encryptSecret } from "@/lib/crypto";
 import { applyBalance } from "@/lib/wallet";
@@ -171,7 +171,7 @@ export async function setOrderStatusAction(formData: FormData) {
 }
 
 export async function refundOrderAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const kind = String(formData.get("kind") ?? "");
   if (kind !== "refund") backErr("/admin/orders", "Thao tác tiền không rõ ràng — đã chặn");
   const id = Number(formData.get("id"));
@@ -186,7 +186,7 @@ export async function refundOrderAction(formData: FormData) {
 }
 
 export async function decideDepositAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const kind = String(formData.get("kind") ?? "");
   const id = Number(formData.get("id"));
   if (kind !== "approve" && kind !== "reject") {
@@ -213,7 +213,7 @@ export async function decideDepositAction(formData: FormData) {
 }
 
 export async function adjustBalanceAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const kind = String(formData.get("kind") ?? "");
   if (kind !== "add" && kind !== "subtract") backErr("/admin/users", "Thao tác tiền không rõ ràng — đã chặn");
   const userId = Number(formData.get("userId"));
@@ -242,7 +242,7 @@ export async function toggleUserAction(formData: FormData) {
 }
 
 export async function saveProviderAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const code = String(formData.get("code") ?? "");
   if (code !== "FZR" && code !== "ERIS") backErr("/admin/providers", "Nhà cung cấp không hợp lệ");
   const apiKey = String(formData.get("apiKey") ?? "").trim();
@@ -267,7 +267,7 @@ export async function checkBalanceAction(formData: FormData) {
 }
 
 export async function saveSettingsAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const path = String(formData.get("_path") ?? "/admin/website");
   const prefix = String(formData.get("_prefix") ?? "");
   for (const [k, v] of formData.entries()) {
@@ -283,7 +283,7 @@ export async function saveSettingsAction(formData: FormData) {
 }
 
 export async function saveSteamConfigAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const num = (k: string, min: number, max: number, fallback: number) => {
     const v = parseFloat(String(formData.get(k) ?? ""));
     return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
@@ -301,7 +301,7 @@ export async function saveSteamConfigAction(formData: FormData) {
 }
 
 export async function saveSteamGiftConfigAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const v = parseFloat(String(formData.get("steamgift_markup_percent") ?? ""));
   const markup = Number.isFinite(v) ? Math.min(100, Math.max(-50, v)) : 2;
   await setSetting("steamgift_markup_percent", String(markup));
@@ -313,7 +313,7 @@ export async function saveSteamGiftConfigAction(formData: FormData) {
 
 
 export async function saveTelegramConfigAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const pct = (name: string, dflt: number) => {
     const v = parseFloat(String(formData.get(name) ?? ""));
     return Number.isFinite(v) ? Math.min(100, Math.max(-50, v)) : dflt;
@@ -331,7 +331,7 @@ export async function saveTelegramConfigAction(formData: FormData) {
 }
 
 export async function saveGatewayAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const { setSetting } = await import("@/lib/settings");
   const { sealSecret } = await import("@/lib/gateways");
   const gw = String(formData.get("gateway") ?? "");
@@ -359,7 +359,7 @@ export async function saveGatewayAction(formData: FormData) {
 }
 
 export async function testGatewayAction(formData: FormData) {
-  await requireAdmin();
+  await requireOwner();
   const { getSettings } = await import("@/lib/settings");
   const { openSecret, bntpayPing, BNTPAY_NETWORKS, BNTPAY_DEFAULT_API_URL } = await import("@/lib/gateways");
   const s = await getSettings();
@@ -431,7 +431,7 @@ export async function toggleDiscountAction(formData: FormData) {
 }
 
 export async function saveCurrencyAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const code = String(formData.get("code") ?? "").toUpperCase();
   const name = String(formData.get("name") ?? "").trim();
   const symbol = String(formData.get("symbol") ?? "").trim();
@@ -450,7 +450,7 @@ export async function saveCurrencyAction(formData: FormData) {
 }
 
 export async function setDefaultCurrencyAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const code = String(formData.get("code") ?? "");
   await prisma.$transaction([
     prisma.currency.updateMany({ data: { isDefault: false } }),
@@ -461,7 +461,7 @@ export async function setDefaultCurrencyAction(formData: FormData) {
 }
 
 export async function deleteCurrencyAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const code = String(formData.get("code") ?? "");
   if (code === "USD") backErr("/admin/currencies", "Không xoá được USD — đây là tiền tệ gốc của hệ thống");
   const cur = await prisma.currency.findUnique({ where: { code } });
@@ -526,7 +526,7 @@ export async function deletePackageAction(formData: FormData) {
 }
 
 export async function savePointsConfigAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const num = (name: string, min: number, max: number, fallback: number) => {
     const v = parseInt(String(formData.get(name) ?? ""), 10);
     return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
@@ -552,7 +552,7 @@ export async function subtractPointsAction(formData: FormData) {
 }
 
 export async function adjustPointsAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const dest = "/admin/points?tab=customers";
   const kind = String(formData.get("kind") ?? "");
   if (kind !== "add" && kind !== "subtract") backErr(dest, "Thao tác điểm không hợp lệ");
@@ -573,7 +573,7 @@ export async function adjustPointsAction(formData: FormData) {
 }
 
 export async function saveVipTiersAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const dest = "/admin/vip";
   const ids = String(formData.get("ids") ?? "").split(",").map((x) => parseInt(x, 10)).filter(Boolean);
   if (!ids.length) backErr(dest, "Chưa có cấp VIP nào");
@@ -613,7 +613,7 @@ export async function saveVipTiersAction(formData: FormData) {
 }
 
 export async function addVipTierAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const name = String(formData.get("name") ?? "").trim().slice(0, 30);
   const thUsd = parseFloat(String(formData.get("threshold") ?? ""));
   if (!name) backErr("/admin/vip", "Chưa nhập tên cấp");
@@ -627,7 +627,7 @@ export async function addVipTierAction(formData: FormData) {
 }
 
 export async function deleteVipTierAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = parseInt(String(formData.get("id") ?? ""), 10) || 0;
   const tier = await prisma.vipTier.findUnique({ where: { id } });
   if (!tier) backErr("/admin/vip", "Không tìm thấy cấp");

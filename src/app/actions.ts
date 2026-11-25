@@ -15,7 +15,7 @@ import { audit } from "@/lib/settings";
 async function setSession(userId: number, role: string) {
   const store = await cookies();
   store.set(SESSION_COOKIE_NAME, makeSessionToken(userId, role), {
-    httpOnly: true, sameSite: "lax", path: "/", maxAge: 30 * 24 * 3600,
+    httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 24 * 3600,
   });
 }
 
@@ -32,6 +32,11 @@ async function captureCreatorAttribution(userId: number) {
       await setAttribution(userId, link.creatorId, link.id, "LINK");
     }
   } catch {   }
+}
+
+function formClientRef(formData: FormData): string | undefined {
+  const raw = String(formData.get("clientRef") ?? "");
+  return /^[A-Za-z0-9_-]{4,64}$/.test(raw) ? raw : undefined;
 }
 
 const AGREE_ERR = "Bạn cần tích vào ô đồng ý với Điều khoản dịch vụ và Chính sách bảo mật";
@@ -222,6 +227,7 @@ export async function buyAction(formData: FormData) {
       qty: Number(formData.get("qty") ?? 1),
       fields,
       promoCode: String(formData.get("promo") ?? "") || undefined,
+      clientRef: formClientRef(formData),
       usePoints: parseInt(String(formData.get("usePoints") ?? "0"), 10) || 0,
     });
     redirect(`/account/orders?msg=${encodeURIComponent("Đặt đơn " + order.code + " thành công")}`);
@@ -250,7 +256,7 @@ export async function buySteamAction(formData: FormData) {
   if (!am) return back("Số tiền nạp không hợp lệ — nhập số đô la, được lẻ tối đa 2 chữ số thập phân (ví dụ 10.50)");
   const amountCents = parseInt(am[1]) * 100 + parseInt((am[2] || "0").padEnd(2, "0"));
   try {
-    const order = await buySteamTopup({ userId: user.id, login, amountCents });
+    const order = await buySteamTopup({ userId: user.id, login, amountCents, clientRef: formClientRef(formData) });
     redirect(`/account/orders?msg=${encodeURIComponent("Đặt đơn " + order.code + " thành công")}`);
   } catch (e) {
     unstable_rethrow(e);
@@ -277,7 +283,7 @@ export async function buySteamGiftAction(formData: FormData) {
   if (!subId || !region) return back("Chọn phiên bản và khu vực cửa hàng trước");
   if (inviteUrl.length < 8) return back("Dán link mời Steam của tài khoản nhận quà");
   try {
-    const order = await buySteamGift({ userId: user.id, appid, subId, region, inviteUrl });
+    const order = await buySteamGift({ userId: user.id, appid, subId, region, inviteUrl, clientRef: formClientRef(formData) });
     redirect(`/account/orders?msg=${encodeURIComponent("Đặt đơn " + order.code + " thành công — quà đang được gửi tới tài khoản Steam nhận")}`);
   } catch (e) {
     unstable_rethrow(e);
@@ -305,7 +311,7 @@ export async function buyTelegramAction(formData: FormData) {
   if (!itemKey) return back("Chọn gói trước");
   if (!username) return back("Nhập username Telegram của tài khoản nhận");
   try {
-    const order = await buyTelegram({ userId: user.id, kind, itemKey, quantity: Number.isInteger(quantity) ? quantity : 1, username });
+    const order = await buyTelegram({ userId: user.id, kind, itemKey, quantity: Number.isInteger(quantity) ? quantity : 1, username, clientRef: formClientRef(formData) });
     redirect(`/account/orders?msg=${encodeURIComponent("Đặt đơn " + order.code + " thành công — Telegram đang được gửi tới tài khoản nhận")}`);
   } catch (e) {
     unstable_rethrow(e);
