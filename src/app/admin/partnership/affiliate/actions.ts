@@ -170,7 +170,7 @@ export async function decideCommissionAction(formData: FormData) {
 }
 
 export async function saveCampaignAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id") ?? 0);
   const name = String(formData.get("name") ?? "").trim().slice(0, 120);
   const slug = String(formData.get("slug") ?? "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
@@ -195,7 +195,7 @@ export async function saveCampaignAction(formData: FormData) {
 }
 
 export async function decideJoinAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const kind = String(formData.get("kind") ?? "");
   if (kind !== "approve" && kind !== "reject") back("/admin/partnership/affiliate/campaigns", undefined, "Thao tác không rõ ràng — đã chặn");
@@ -206,7 +206,7 @@ export async function decideJoinAction(formData: FormData) {
 }
 
 export async function saveMediaAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id") ?? 0);
   const title = String(formData.get("title") ?? "").trim().slice(0, 120);
   const fileUrl = String(formData.get("fileUrl") ?? "").trim().slice(0, 500);
@@ -226,7 +226,7 @@ export async function saveMediaAction(formData: FormData) {
 }
 
 export async function deleteMediaAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   await prisma.creatorMediaAsset.delete({ where: { id } });
   await audit(admin.id, "creator.media.delete", String(id));

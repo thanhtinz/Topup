@@ -38,7 +38,7 @@ async function mailApplicant(email: string, subject: string, html: string) {
 }
 
 export async function reviewPartnerApplicationAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const kind = String(formData.get("kind") ?? "");
   const dest = `/admin/partnership/applications/${id}`;
@@ -83,7 +83,7 @@ export async function reviewPartnerApplicationAction(formData: FormData) {
 }
 
 export async function addApplicationMessageAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const applicationId = Number(formData.get("applicationId"));
   const message = str(formData, "message", 2000);
   const visibility = String(formData.get("visibility") ?? "INTERNAL") === "PARTNER" ? "PARTNER" : "INTERNAL";
@@ -95,7 +95,7 @@ export async function addApplicationMessageAction(formData: FormData) {
 }
 
 export async function savePartnerAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const partner = await prisma.partner.findUnique({ where: { id } });
   if (!partner) back("/admin/partnership/partners", undefined, "Không tìm thấy Partner");
@@ -120,7 +120,7 @@ export async function savePartnerAction(formData: FormData) {
 }
 
 export async function enableAffiliateAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const dest = `/admin/partnership/partners/${id}`;
   const partner = await prisma.partner.findUnique({ where: { id } });
@@ -155,7 +155,7 @@ export async function enableAffiliateAction(formData: FormData) {
 }
 
 export async function saveProposalAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id") ?? 0);
   const partnerId = Number(formData.get("partnerId"));
   const title = str(formData, "title", 200);
@@ -180,7 +180,7 @@ export async function saveProposalAction(formData: FormData) {
 }
 
 export async function setProposalStatusAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const kind = String(formData.get("kind") ?? "");
   const map: Record<string, string> = { send: "SENT", counter: "COUNTERED", accept: "ACCEPTED", decline: "DECLINED", expire: "EXPIRED" };
@@ -191,7 +191,7 @@ export async function setProposalStatusAction(formData: FormData) {
 }
 
 export async function savePartnershipTypeAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   await prisma.partnershipType.update({
     where: { id },
@@ -208,7 +208,7 @@ export async function savePartnershipTypeAction(formData: FormData) {
 }
 
 export async function savePartnerCampaignAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id") ?? 0);
   const name = str(formData, "name", 200);
   if (!name) back("/admin/partnership/campaigns", undefined, "Thiếu tên chiến dịch");
@@ -237,7 +237,7 @@ export async function savePartnerCampaignAction(formData: FormData) {
 }
 
 export async function invitePartnerAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const campaignId = Number(formData.get("campaignId"));
   const partnerId = Number(formData.get("partnerId"));
   const dest = `/admin/partnership/campaigns/${campaignId}`;
@@ -255,7 +255,7 @@ export async function invitePartnerAction(formData: FormData) {
 }
 
 export async function setJoinStatusAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const campaignId = Number(formData.get("campaignId"));
   const kind = String(formData.get("kind") ?? "");
@@ -267,7 +267,7 @@ export async function setJoinStatusAction(formData: FormData) {
 }
 
 export async function saveDeliverableAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const campaignPartnerId = Number(formData.get("campaignPartnerId"));
   const campaignId = Number(formData.get("campaignId"));
   const title = str(formData, "title", 200);
@@ -285,7 +285,7 @@ export async function saveDeliverableAction(formData: FormData) {
 }
 
 export async function reviewDeliverableAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const kind = String(formData.get("kind") ?? "");
   const backTo = String(formData.get("backTo") ?? "/admin/partnership/deliverables");
@@ -317,7 +317,7 @@ export async function reviewDeliverableAction(formData: FormData) {
 }
 
 export async function saveAgreementAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id") ?? 0);
   const partnerId = Number(formData.get("partnerId"));
   const title = str(formData, "title", 200);
