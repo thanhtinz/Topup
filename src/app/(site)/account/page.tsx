@@ -37,6 +37,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     spend30dCents(user.id),
     getVipTiers(),
   ]);
+  const myPartner = await prisma.partner.findUnique({ where: { userId: user.id }, select: { id: true } });
   const myTier = ptsCfg.enabled ? resolveTier(spend30, tiers) : null;
   const quicks = await quickTopups(user.id, 4);
   const firstCouponTier = tiers.find((t) => t.couponPercent > 0);
@@ -185,6 +186,13 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
             Hợp tác cùng BNTGame
             <span className="chev">{chev}</span>
           </Link>
+          {myPartner && (
+            <Link href="/partner">
+              <span className="m-ico"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /><path d="M8 15h5" /></svg></span>
+              Partner Portal
+              <span className="chev">{chev}</span>
+            </Link>
+          )}
           <Link href="/support">
             <span className="m-ico"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z" /><path d="M21 14h-3a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-5Z" /><path d="M3 14v-2a9 9 0 0 1 18 0v2" /></svg></span>
             Kênh hỗ trợ
