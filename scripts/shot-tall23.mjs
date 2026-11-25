@@ -1,0 +1,23 @@
+import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
+
+const BASE = "http://127.0.0.1:3107";
+const slug = process.argv[2] || "free-fire";
+const out = process.argv[3] || "shots/topup21-head-1280.png";
+const CHS = process.env.HOME + "/workspace/tools/pptr-browsers/chrome-headless-shell/linux-157.0.8103.78/chrome-headless-shell-linux64/chrome-headless-shell";
+const chrome = spawn(CHS, ["--headless", "--disable-gpu", "--no-sandbox", "--remote-debugging-port=9335", "--window-size=1280,1500", "about:blank"], { stdio: "ignore" });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await sleep(1500);
+const targets = await (await fetch("http://127.0.0.1:9335/json")).json();
+const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
+await new Promise((r) => (ws.onopen = r));
+let id = 0; const pending = new Map();
+ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); } };
+const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+await send("Page.enable");
+await send("Page.navigate", { url: `${BASE}/game/${slug}` });
+await sleep(3000);
+const shot = await send("Page.captureScreenshot", { format: "png" });
+writeFileSync(out, Buffer.from(shot.data, "base64"));
+console.log("saved", out);
+ws.close(); chrome.kill();

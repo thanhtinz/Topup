@@ -1,0 +1,1020 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  STAFF
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  PARTIAL
+  DELIVERED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum DepositStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProviderCode {
+  FZR
+  ERIS
+  MANUAL
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  name         String
+  passwordHash String
+  role         Role          @default(CUSTOMER)
+  balanceCents Int           @default(0)
+  points       Int           @default(0)
+  pointsTotalEarned Int      @default(0)
+  referredById Int?
+  referredBy   User?         @relation("Referrals", fields: [referredById], references: [id])
+  referrals    User[]        @relation("Referrals")
+  affiliateBalanceCents Int   @default(0)
+  affiliateEarnedCents  Int   @default(0)
+  refClicks             Int   @default(0)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  orders       Order[]
+  deposits     DepositRequest[]
+  walletTxns   WalletTxn[]
+  pointTxns    PointTxn[]
+  affiliateTxns AffiliateTxn[]
+  creator       Creator?
+  partnerAccount      Partner?
+  partnerApplications PartnerApplication[]
+  partnersOwned       Partner[]         @relation("PartnerOwner")
+  campaignsOwned      PartnerCampaign[] @relation("CampaignOwner")
+  notifications Notification[]
+  reviews      Review[]
+  wishlistItems WishlistItem[]
+  priceAlerts   PriceAlert[]
+  gameNotifySubs GameNotifySub[]
+  apiKeys      ApiKey[]
+  tickets      Ticket[]
+  reviewVotes  ReviewVote[]
+  audits       AuditLog[]
+}
+
+model Ticket {
+  id        Int             @id @default(autoincrement())
+  code      String          @unique
+  userId    Int
+  user      User            @relation(fields: [userId], references: [id])
+  subject   String
+  orderCode String?
+  status    String          @default("OPEN")
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  messages  TicketMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([status, updatedAt])
+}
+
+model TicketMessage {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  Int
+  fromStaff Boolean  @default(false)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model WalletTxn {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  deltaCents  Int
+  balanceAfter Int
+  kind        String
+  ref         String?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Category {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  slug  String @unique
+  games Game[]
+}
+
+model Game {
+  id          Int       @id @default(autoincrement())
+  name        String
+  slug        String    @unique
+  cover       String
+  bannerUrl   String?
+  genre       String    @default("")
+  description String   @default("")
+  categoryId  Int?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  regions     String[]
+  fieldsJson  Json      @default("[]")
+  methodFieldsJson Json?
+  uidGuideJson Json     @default("[]")
+  compareApproved Boolean @default(true)
+  priority    String    @default("ERIS")
+  active      Boolean   @default(true)
+  isNew       Boolean   @default(false)
+  soldCount   Int       @default(0)
+  ratingAvg   Float     @default(0)
+  ratingCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  packages    Package[]
+  orders      Order[]
+  notifySubs  GameNotifySub[]
+  reviews     Review[]
+  wishlistItems WishlistItem[]
+}
+
+model Package {
+  id          Int          @id @default(autoincrement())
+  gameId      Int
+  game        Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  name        String
+  region      String       @default("Global")
+  method      String       @default("UID")
+  costCents   Int
+  priceCents  Int
+  listPriceCents Int?
+  provider    ProviderCode @default(MANUAL)
+  externalId  String?
+  imageUrl    String?
+  active      Boolean      @default(true)
+  stockNote   String?
+  createdAt   DateTime     @default(now())
+  orderItems  OrderItem[]
+  wishlistItems WishlistItem[]
+  priceAlerts   PriceAlert[]
+  flashItems    FlashSaleItem[]
+
+  @@index([gameId, active])
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  code        String      @unique
+  userId      Int
+  user        User        @relation(fields: [userId], references: [id])
+  gameId      Int
+  game        Game        @relation(fields: [gameId], references: [id])
+  status      OrderStatus @default(PENDING)
+  totalCents  Int
+  promoCode   String?
+  discountCents Int       @default(0)
+  pointsUsed  Int         @default(0)
+  vipDiscountCents Int    @default(0)
+  vipTierName String?
+  providerRef String?
+  note        String?
+  clientRef   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  items       OrderItem[]
+  review      Review?
+  creatorCommission CreatorCommission?
+
+  @@unique([userId, clientRef])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+
+
+model ApiKey {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String    @default("")
+  prefix     String
+  keyHash    String    @unique
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model OrderItem {
+  id         Int     @id @default(autoincrement())
+  orderId    Int
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  packageId  Int
+  package    Package @relation(fields: [packageId], references: [id])
+  qty        Int     @default(1)
+  priceCents Int
+  flashItemId Int?
+  fieldsJson Json    @default("{}")
+  status     OrderStatus @default(PENDING)
+  providerRef String?
+}
+
+model DepositRequest {
+  id         Int           @id @default(autoincrement())
+  code       String        @unique
+  userId     Int
+  user       User          @relation(fields: [userId], references: [id])
+  amountCents Int
+  method     String
+  status     DepositStatus @default(PENDING)
+  note       String?
+  vndAmount  Int?
+  providerData String?
+  createdAt  DateTime      @default(now())
+  decidedAt  DateTime?
+
+  @@index([status, createdAt])
+}
+
+
+model WebhookReceipt {
+  ref       String   @id
+  createdAt DateTime @default(now())
+}
+
+model DiscountCode {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  percent     Int
+  maxUses     Int?
+  usedCount   Int      @default(0)
+  active      Boolean  @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  creatorId      Int?
+  campaignId     Int?
+  minOrderCents  Int?
+  maxDiscountCents Int?
+
+  @@index([creatorId])
+}
+
+
+model Provider {
+  id           Int          @id @default(autoincrement())
+  code         ProviderCode @unique
+  name         String
+  baseUrl      String       @default("")
+  apiKeyEnc    String       @default("")
+  markupPercent Float       @default(5)
+  enabled      Boolean      @default(false)
+  balanceNote  String       @default("")
+  lastSyncAt   DateTime?
+}
+
+model Setting {
+  key   String @id
+  value String @default("")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  detail    String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Currency {
+  code       String  @id
+  name       String
+  symbol     String
+  ratePerUsd Float
+  decimals   Int     @default(2)
+  enabled    Boolean @default(true)
+  isDefault  Boolean @default(false)
+  sortOrder  Int     @default(0)
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+
+model WishlistItem {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId    Int?
+  game      Game?    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  packageId Int?
+  package   Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, gameId])
+  @@unique([userId, packageId])
+  @@index([userId, createdAt])
+}
+
+
+
+
+model PriceAlert {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packageId     Int
+  package       Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  targetCents   Int?
+  baselineCents Int
+  active        Boolean   @default(true)
+  triggeredAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, packageId])
+  @@index([packageId, active])
+}
+
+
+
+model GameNotifySub {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId    Int
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, gameId])
+  @@index([gameId])
+}
+
+
+model FlashSale {
+  id        Int            @id @default(autoincrement())
+  name      String
+  startsAt  DateTime
+  endsAt    DateTime
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  items     FlashSaleItem[]
+
+  @@index([active, startsAt, endsAt])
+}
+
+model FlashSaleItem {
+  id             Int       @id @default(autoincrement())
+  flashSaleId    Int
+  flashSale      FlashSale @relation(fields: [flashSaleId], references: [id], onDelete: Cascade)
+  packageId      Int
+  package        Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  salePriceCents Int
+  stockLimit     Int?
+  soldCount      Int       @default(0)
+
+  @@unique([flashSaleId, packageId])
+  @@index([packageId])
+}
+
+model Post {
+  id          Int       @id @default(autoincrement())
+  slug        String    @unique
+  title       String
+  excerpt     String    @default("")
+  content     String    @default("")
+  coverUrl    String    @default("")
+  category    String    @default("TIN_TUC")
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([published, publishedAt])
+}
+
+
+model AffiliateTxn {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  kind        String
+  amountCents Int
+  ref         String?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@unique([kind, ref])
+  @@index([userId, createdAt])
+}
+
+model PointTxn {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+  delta        Int
+  kind         String
+  ref          String?
+  note         String?
+  balanceAfter Int
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, kind, createdAt])
+}
+
+model Review {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id])
+  orderId       Int      @unique
+  order         Order    @relation(fields: [orderId], references: [id])
+  gameId        Int
+  game          Game     @relation(fields: [gameId], references: [id])
+  stars         Int
+  comment       String?
+  pointsAwarded Int      @default(0)
+  helpfulCount Int      @default(0)
+  votes        ReviewVote[]
+  createdAt     DateTime @default(now())
+
+  @@index([gameId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model ReviewVote {
+  id        Int      @id @default(autoincrement())
+  reviewId  Int
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([reviewId, userId])
+}
+
+model VipTier {
+  id              Int     @id @default(autoincrement())
+  name            String
+  thresholdCents  Int     @default(0)
+  discountPercent Int     @default(0)
+  couponPercent   Int     @default(0)
+  lateComp        Boolean @default(false)
+  iconUrl         String?
+  sort            Int     @default(0)
+  createdAt       DateTime @default(now())
+}
+
+model ContactWidget {
+  id        Int      @id @default(autoincrement())
+  name      String
+  link      String
+  image     String?
+  active    Boolean  @default(true)
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+
+
+
+
+model SteamGiftGame {
+  id        Int      @id @default(autoincrement())
+  appid     Int      @unique
+  name      String
+  rank      Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, rank])
+  @@index([name])
+}
+
+
+
+
+model CreatorLevel {
+  id                  Int       @id @default(autoincrement())
+  name                String    @unique
+  rateBps             Int
+  minRevenue30dCents  Int       @default(0)
+  color               String    @default("#0B63E5")
+  sort                Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  creators            Creator[]
+}
+
+model CreatorApplication {
+  id              Int      @id @default(autoincrement())
+  userId          Int?
+  email           String
+  fullName        String
+  country         String   @default("")
+  language        String   @default("")
+  contactMethod   String   @default("")
+  contactInfo     String   @default("")
+  channelsJson    Json     @default("[]")
+  contentTypes    String   @default("")
+  games           String   @default("")
+  streamFreq      String   @default("")
+  videoFreq       String   @default("")
+  experience      String   @default("")
+  partnershipJson Json     @default("[]")
+  status          String   @default("PENDING")
+  reviewNote      String   @default("")
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+
+
+model EmailCode {
+  id        Int      @id @default(autoincrement())
+  email     String
+  purpose   String
+  codeHash  String
+  payload   String   @default("")
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+}
+
+model Creator {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique
+  user             User     @relation(fields: [userId], references: [id])
+  code             String   @unique
+  displayName      String
+  avatarUrl        String   @default("")
+  coverUrl         String   @default("")
+  headline         String   @default("")
+  bio              String   @default("")
+  country          String   @default("")
+  language         String   @default("")
+  tier             String   @default("CREATOR")
+  status           String   @default("ACTIVE")
+  levelId          Int?
+  level            CreatorLevel? @relation(fields: [levelId], references: [id])
+  customRateBps    Int?
+  contactMethod    String   @default("")
+  contactInfo      String   @default("")
+  agreementVersion String   @default("")
+  agreementAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  channels         CreatorChannel[]
+  links            CreatorLink[]
+  clicks           CreatorClick[]
+  commissions      CreatorCommission[]
+  payouts          CreatorPayout[]
+  adjustments      CreatorAdjustment[]
+  campaignJoins    CreatorCampaignJoin[]
+  partner          Partner?
+
+  @@index([status])
+}
+
+model CreatorChannel {
+  id              Int     @id @default(autoincrement())
+  creatorId       Int
+  creator         Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  platform        String
+  channelName     String  @default("")
+  url             String  @default("")
+  followers       Int     @default(0)
+  avgViews        Int     @default(0)
+  category        String  @default("")
+  audienceCountry String  @default("")
+  createdAt       DateTime @default(now())
+
+  @@index([creatorId])
+}
+
+model CreatorLink {
+  id          Int     @id @default(autoincrement())
+  creatorId   Int
+  creator     Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  code        String  @unique
+  name        String  @default("")
+  destination String  @default("/")
+  campaignId  Int?
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+  clicks      CreatorClick[]
+
+  @@index([creatorId])
+}
+
+model CreatorClick {
+  id        Int      @id @default(autoincrement())
+  linkId    Int
+  link      CreatorLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  creatorId Int
+  creator   Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  visitorId String   @default("")
+  ipHash    String   @default("")
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([creatorId, createdAt])
+  @@index([linkId, createdAt])
+  @@index([visitorId, linkId, createdAt])
+}
+
+model CreatorAttribution {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  creatorId Int
+  linkId    Int?
+  source    String   @default("LINK")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([creatorId])
+}
+
+model CreatorCommission {
+  id            Int      @id @default(autoincrement())
+  creatorId     Int
+  creator       Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  orderId       Int      @unique
+  order         Order    @relation(fields: [orderId], references: [id])
+  orderCode     String   @default("")
+  campaignId    Int?
+  eligibleCents Int
+  rateBps       Int
+  amountCents   Int
+  status        String   @default("PENDING")
+  availableAt   DateTime
+  note          String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([creatorId, status])
+  @@index([creatorId, createdAt])
+}
+
+model CreatorAdjustment {
+  id          Int      @id @default(autoincrement())
+  creatorId   Int
+  creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  amountCents Int
+  reason      String   @default("")
+  adminId     Int?
+  createdAt   DateTime @default(now())
+
+  @@index([creatorId, createdAt])
+}
+
+model CreatorPayout {
+  id          Int      @id @default(autoincrement())
+  creatorId   Int
+  creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  amountCents Int
+  method      String
+  destination String
+  status      String   @default("PENDING")
+  txRef       String   @default("")
+  reviewNote  String   @default("")
+  reviewedById Int?
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([creatorId, status])
+  @@index([status, createdAt])
+}
+
+model CreatorCampaign {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String   @default("")
+  bannerUrl   String   @default("")
+  startAt     DateTime
+  endAt       DateTime
+  bonusBps    Int      @default(0)
+  budgetCents Int      @default(0)
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  joins       CreatorCampaignJoin[]
+
+  @@index([status, startAt])
+}
+
+model CreatorCampaignJoin {
+  id         Int      @id @default(autoincrement())
+  campaignId Int
+  campaign   CreatorCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorId  Int
+  creator    Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, creatorId])
+  @@index([creatorId])
+}
+
+model CreatorMediaAsset {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String   @default("")
+  fileUrl     String
+  fileType    String   @default("IMAGE")
+  category    String   @default("")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([active, category])
+}
+
+/* ================= PARTNERSHIP MANAGEMENT (PRD/FSD v2.0) =================
+   Partnership là hệ thống tổng thể; Affiliate (Creator*) chỉ là một module tùy chọn.
+   Mọi bảng ở đây tách biệt với ledger Affiliate — không ghi trùng chi phí. */
+
+model PartnershipType {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  tagline     String   @default("")
+  description String   @default("")
+  isActive    Boolean  @default(true)
+  sort        Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model Partner {
+  id            Int      @id @default(autoincrement())
+  userId        Int?     @unique
+  user          User?    @relation(fields: [userId], references: [id])
+  creatorId     Int?     @unique
+  creator       Creator? @relation(fields: [creatorId], references: [id])
+  applicantType String   @default("INDIVIDUAL")
+  displayName   String
+  legalName     String   @default("")
+  email         String
+  country       String   @default("")
+  status        String   @default("ACTIVE")
+  ownerId       Int?
+  owner         User?    @relation("PartnerOwner", fields: [ownerId], references: [id])
+  internalNote  String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  profile       PartnerProfile?
+  applications  PartnerApplication[]
+  proposals     Proposal[]
+  campaignJoins CampaignPartner[]
+  agreements    Agreement[]
+  payments      PartnerPayment[]
+  messages      PartnerMessage[]
+
+  @@index([status])
+  @@index([email])
+}
+
+model PartnerProfile {
+  id              Int      @id @default(autoincrement())
+  partnerId       Int      @unique
+  partner         Partner  @relation(fields: [partnerId], references: [id])
+  bio             String   @default("")
+  website         String   @default("")
+  socialLinksJson Json     @default("[]")
+  audienceJson    Json     @default("{}")
+  mediaKitUrl     String   @default("")
+  paymentInfoJson Json     @default("{}")
+  updatedAt       DateTime @updatedAt
+}
+
+model PartnerApplication {
+  id              Int      @id @default(autoincrement())
+  applicantUserId Int?
+  applicantUser   User?    @relation(fields: [applicantUserId], references: [id])
+  partnerId       Int?
+  partner         Partner? @relation(fields: [partnerId], references: [id])
+  applicantType   String   @default("INDIVIDUAL")
+  fullName        String
+  email           String
+  country         String   @default("")
+  typesJson       Json     @default("[]")
+  socialLinksJson Json     @default("[]")
+  audienceText    String   @default("")
+  proposalText    String   @default("")
+  budgetText      String   @default("")
+  extraJson       Json     @default("{}")
+  contactMethod   String   @default("")
+  contactInfo     String   @default("")
+  consentAt       DateTime?
+  status          String   @default("SUBMITTED")
+  reviewNote      String   @default("")
+  partnerResponse String   @default("")
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  attachments     PartnerApplicationAttachment[]
+  messages        PartnerMessage[]
+
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+model PartnerApplicationAttachment {
+  id            Int                @id @default(autoincrement())
+  applicationId Int
+  application   PartnerApplication @relation(fields: [applicationId], references: [id])
+  fileUrl       String
+  fileName      String
+  mimeType      String             @default("")
+  createdAt     DateTime           @default(now())
+}
+
+model Proposal {
+  id            Int      @id @default(autoincrement())
+  partnerId     Int
+  partner       Partner  @relation(fields: [partnerId], references: [id])
+  applicationId Int?
+  title         String
+  scopeText     String   @default("")
+  priceCents    Int      @default(0)
+  currency      String   @default("USD")
+  status        String   @default("DRAFT")
+  expiresAt     DateTime?
+  createdById   Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([partnerId, status])
+}
+
+model PartnerCampaign {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  typeCode    String   @default("CUSTOM")
+  objective   String   @default("")
+  brief       String   @default("")
+  startAt     DateTime?
+  endAt       DateTime?
+  budgetCents Int      @default(0)
+  currency    String   @default("USD")
+  status      String   @default("DRAFT")
+  ownerId     Int?
+  owner       User?    @relation("CampaignOwner", fields: [ownerId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  joins       CampaignPartner[]
+  agreements  Agreement[]
+  payments    PartnerPayment[]
+
+  @@index([status])
+}
+
+model CampaignPartner {
+  id           Int             @id @default(autoincrement())
+  campaignId   Int
+  campaign     PartnerCampaign @relation(fields: [campaignId], references: [id])
+  partnerId    Int
+  partner      Partner         @relation(fields: [partnerId], references: [id])
+  agreementId  Int?
+  status       String          @default("INVITED")
+  createdAt    DateTime        @default(now())
+  deliverables Deliverable[]
+
+  @@unique([campaignId, partnerId])
+}
+
+model Deliverable {
+  id                Int             @id @default(autoincrement())
+  campaignPartnerId Int
+  campaignPartner   CampaignPartner @relation(fields: [campaignPartnerId], references: [id])
+  title             String
+  description       String          @default("")
+  dueAt             DateTime?
+  submittedUrl      String          @default("")
+  submittedNote     String          @default("")
+  kpiJson           Json            @default("{}")
+  status            String          @default("PENDING")
+  reviewerId        Int?
+  reviewNote        String          @default("")
+  submittedAt       DateTime?
+  reviewedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  payments          PartnerPayment[]
+
+  @@index([status, dueAt])
+}
+
+model Agreement {
+  id                Int              @id @default(autoincrement())
+  partnerId         Int
+  partner           Partner          @relation(fields: [partnerId], references: [id])
+  campaignId        Int?
+  campaign          PartnerCampaign? @relation(fields: [campaignId], references: [id])
+  title             String
+  scopeText         String           @default("")
+  feeCents          Int              @default(0)
+  currency          String           @default("USD")
+  contentRightsText String           @default("")
+  contractFileUrl   String           @default("")
+  contractFileName  String           @default("")
+  version           Int              @default(1)
+  status            String           @default("DRAFT")
+  sentAt            DateTime?
+  confirmedAt       DateTime?
+  effectiveAt       DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  payments          PartnerPayment[]
+
+  @@index([partnerId, status])
+}
+
+model PartnerPayment {
+  id            Int              @id @default(autoincrement())
+  partnerId     Int
+  partner       Partner          @relation(fields: [partnerId], references: [id])
+  campaignId    Int?
+  campaign      PartnerCampaign? @relation(fields: [campaignId], references: [id])
+  agreementId   Int?
+  agreement     Agreement?       @relation(fields: [agreementId], references: [id])
+  deliverableId Int?
+  deliverable   Deliverable?     @relation(fields: [deliverableId], references: [id])
+  amountCents   Int
+  feeCents      Int              @default(0)
+  currency      String           @default("USD")
+  type          String           @default("FIXED_FEE")
+  method        String           @default("")
+  status        String           @default("DRAFT")
+  dueAt         DateTime?
+  paidAt        DateTime?
+  txRef         String           @default("")
+  receiptUrl    String           @default("")
+  note          String           @default("")
+  createdById   Int?
+  approvedById  Int?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([partnerId, status])
+  @@index([status])
+}
+
+model PartnerMessage {
+  id            Int                 @id @default(autoincrement())
+  partnerId     Int?
+  partner       Partner?            @relation(fields: [partnerId], references: [id])
+  applicationId Int?
+  application   PartnerApplication? @relation(fields: [applicationId], references: [id])
+  campaignId    Int?
+  senderId      Int?
+  visibility    String              @default("INTERNAL")
+  message       String
+  createdAt     DateTime            @default(now())
+
+  @@index([partnerId, createdAt])
+  @@index([applicationId, createdAt])
+}

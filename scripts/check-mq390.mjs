@@ -1,0 +1,18 @@
+import { spawn } from "node:child_process";
+const CHROME = "/home/hatch/workspace/tools/pptr-browsers/chrome-headless-shell/linux-157.0.8103.78/chrome-headless-shell-linux64/chrome-headless-shell";
+const proc = spawn(CHROME, ["--headless", "--remote-debugging-port=9348", "--no-sandbox", "--disable-gpu", "--window-size=360,844", "about:blank"], { stdio: "ignore" });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await sleep(2500);
+const targets = await (await fetch("http://127.0.0.1:9348/json")).json();
+const ws = new WebSocket(targets.find((t) => t.type === "page").webSocketDebuggerUrl);
+let seq = 0; const pend = new Map();
+ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m.result); pend.delete(m.id); } };
+await new Promise((r) => (ws.onopen = r));
+const send = (method, params = {}) => new Promise((res) => { const id = ++seq; pend.set(id, res); ws.send(JSON.stringify({ id, method, params })); });
+await send("Page.enable"); await send("Runtime.enable");
+await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+await send("Page.navigate", { url: "http://localhost:3107/game/free-fire" });
+await sleep(2400);
+const r = await send("Runtime.evaluate", { expression: `(() => { const b = document.querySelector('.head-meta .badge'); const cs = getComputedStyle(b); return { innerW: window.innerWidth, font: cs.fontSize, pad: cs.paddingLeft, mq400: matchMedia('(max-width:400px)').matches, mq560: matchMedia('(max-width:560px)').matches }; })()`, returnByValue: true });
+console.log(JSON.stringify(r?.result?.value));
+proc.kill();
