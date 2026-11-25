@@ -15,7 +15,7 @@ function back(path: string, msg?: string, err?: string): never {
 }
 
 export async function updateCreatorAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const creator = await prisma.creator.findUnique({ where: { id } });
   if (!creator) back("/admin/partnership/affiliate", undefined, "Không tìm thấy Affiliate");
@@ -56,7 +56,7 @@ export async function addAdjustmentAction(formData: FormData) {
 }
 
 export async function createCreatorCouponAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const creatorId = Number(formData.get("creatorId"));
   const code = String(formData.get("code") ?? "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
   const percent = parseInt(String(formData.get("percent") ?? "0"), 10);
@@ -85,7 +85,7 @@ export async function createCreatorCouponAction(formData: FormData) {
 }
 
 export async function toggleCouponAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const creatorId = Number(formData.get("creatorId"));
   const c = await prisma.discountCode.findUnique({ where: { id } });

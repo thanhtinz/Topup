@@ -1,7 +1,9 @@
 import { prisma } from "../src/lib/db";
 import { applyPoints } from "../src/lib/points";
+import { assertTestDb } from "./guard";
 
 async function main() {
+  assertTestDb();
   const user = await prisma.user.findUnique({ where: { email: "demo@bnttopup.local" } });
   if (!user) throw new Error("no demo user");
   await prisma.user.update({ where: { id: user.id }, data: { points: 400 } });

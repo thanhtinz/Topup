@@ -6,6 +6,7 @@ import { fmtUSD } from "@/lib/money";
 import { orderGroup } from "@/lib/order-groups";
 import { pointsConfig } from "@/lib/points";
 import RateForm from "./RateForm";
+import { ClearClientRefs } from "@/components/ClientRefInput";
 import OrderCard, { type OrderCardData } from "./OrderCard";
 
 export const dynamic = "force-dynamic";
@@ -100,6 +101,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="bsx">
+      <ClearClientRefs />
       <div className="container" style={{ maxWidth: 880, paddingTop: 28, paddingBottom: 52 }}>
         <p className="crumb"><Link href="/account">← Hồ sơ</Link></p>
         <div style={{ borderRadius: 20, background: "#EFF6FE", border: "1px solid #BCD9FB", padding: "24px 26px" }}>

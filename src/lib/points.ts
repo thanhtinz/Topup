@@ -78,6 +78,7 @@ function startOfToday(): Date {
 
 export async function awardReviewPoints(tx: Tx, userId: number, orderCode: string, cfg: PointsConfig): Promise<number> {
   if (!cfg.enabled || cfg.perReview <= 0 || cfg.dailyCap <= 0) return 0;
+  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
   const todayCount = await tx.pointTxn.count({
     where: { userId, kind: "EARN_REVIEW", createdAt: { gte: startOfToday() } },
   });
@@ -128,9 +129,12 @@ export async function checkLateCompensation(userId: number, tier: VipTierRow | n
     const already = await prisma.pointTxn.findFirst({ where: { userId, kind: "LATE_COMP", ref: o.code } });
     if (already) continue;
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+      const dup = await tx.pointTxn.findFirst({ where: { userId, kind: "LATE_COMP", ref: o.code } });
+      if (dup) return;
       await applyPoints(tx, userId, cfg.vipLatePoints, "LATE_COMP", o.code, `Bồi thường giao chậm đơn ${o.code}`);
+      credited += cfg.vipLatePoints;
     });
-    credited += cfg.vipLatePoints;
   }
   return credited;
 }

@@ -70,7 +70,7 @@ export default function SteamTopup(p: Props) {
 
   return (
     <form action={buySteamAction} className="steam-wrap">
-        <ClientRefInput />
+        <ClientRefInput scope="steam-topup" />
       <div className="steam-head">
         <h1>Steam Top-Up (CIS)</h1>
         <p>{T.headSub}</p>

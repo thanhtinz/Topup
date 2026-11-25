@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getPrefs } from "@/lib/prefs";
 import { fmtMoney } from "@/lib/moneyfmt";
+import { ClearClientRefs } from "@/components/ClientRefInput";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
 
   return (
     <main className="bsx">
+      <ClearClientRefs />
       <div className="container" style={{ maxWidth: 760, paddingTop: 28, paddingBottom: 52 }}>
         <p style={{ marginBottom: 10 }}><Link href="/account/orders" style={{ fontWeight: 600 }}>← Tất cả đơn hàng</Link></p>
         <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>

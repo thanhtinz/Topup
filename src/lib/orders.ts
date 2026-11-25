@@ -92,7 +92,7 @@ export async function buyPackage(input: BuyInput) {
     if (activeFlash) {
       if (activeFlash.stockLimit != null) {
         const inc = await tx.flashSaleItem.updateMany({
-          where: { id: activeFlash.itemId, soldCount: { lt: activeFlash.stockLimit } },
+          where: { id: activeFlash.itemId, soldCount: { lte: activeFlash.stockLimit - qty } },
           data: { soldCount: { increment: qty } },
         });
         if (inc.count === 0) throw new Error("FLASH_SOLD_OUT");
@@ -205,7 +205,7 @@ export async function refundOrder(orderId: number) {
     await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
     const order = await tx.order.findUnique({ where: { id: orderId } });
     if (!order) throw new Error("ORDER_NOT_FOUND");
-    if (order.status === "REFUNDED" || order.status === "DELIVERED") throw new Error("ORDER_NOT_REFUNDABLE");
+    if (order.status === "REFUNDED" || order.status === "DELIVERED" || order.status === "PARTIAL") throw new Error("ORDER_NOT_REFUNDABLE");
     await applyBalance(tx, order.userId, order.totalCents, "refund", order.code, "Hoàn đơn " + order.code, true);
     if (order.pointsUsed > 0) await applyPoints(tx, order.userId, order.pointsUsed, "REFUND_RETURN", order.code, "Hoàn điểm đơn " + order.code);
     return tx.order.update({ where: { id: orderId }, data: { status: "REFUNDED" } });
@@ -223,15 +223,21 @@ export async function refundOrder(orderId: number) {
   return done;
 }
 
-async function partialRefund(order: { id: number; userId: number; code: string; totalCents: number; pointsUsed: number }, placed: number, qty: number) {
+export async function partialRefund(order: { id: number; userId: number; code: string; totalCents: number; pointsUsed: number }, placed: number, qty: number) {
   const kept = Math.floor((order.totalCents * placed) / qty);
   const refundCents = order.totalCents - kept;
   const pointsRefund = order.pointsUsed - Math.floor((order.pointsUsed * placed) / qty);
-  await prisma.$transaction(async (tx) => {
+  const claimed = await prisma.$transaction(async (tx) => {
+    const claim = await tx.order.updateMany({
+      where: { id: order.id, status: { notIn: ["REFUNDED", "DELIVERED", "PARTIAL", "FAILED"] } },
+      data: { status: "PARTIAL", note: `Giao một phần ${placed}/${qty} — đã hoàn phần chưa giao` },
+    });
+    if (claim.count === 0) return false;
     if (refundCents > 0) await applyBalance(tx, order.userId, refundCents, "refund", order.code, "Hoàn phần chưa giao đơn " + order.code, true);
     if (pointsRefund > 0) await applyPoints(tx, order.userId, pointsRefund, "REFUND_RETURN", order.code, "Hoàn điểm phần chưa giao đơn " + order.code);
-    await tx.order.update({ where: { id: order.id }, data: { status: "PARTIAL", note: `Giao một phần ${placed}/${qty} — đã hoàn phần chưa giao` } });
+    return true;
   });
+  if (!claimed) return;
   const failedUnits = qty - placed;
   const flashItems = await prisma.orderItem.findMany({ where: { orderId: order.id, flashItemId: { not: null } }, select: { flashItemId: true } });
   for (const fi of flashItems) {
@@ -245,7 +251,7 @@ async function partialRefund(order: { id: number; userId: number; code: string; 
 
 export async function failOrderWithRefund(orderId: number, userId: number, code: string) {
   const claim = await prisma.order.updateMany({
-    where: { id: orderId, status: { notIn: ["REFUNDED", "DELIVERED"] } },
+    where: { id: orderId, status: { notIn: ["REFUNDED", "DELIVERED", "PARTIAL"] } },
     data: { status: "FAILED" },
   });
   if (claim.count === 0) return;

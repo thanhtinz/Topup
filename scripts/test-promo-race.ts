@@ -1,8 +1,10 @@
 import { prisma } from "../src/lib/db";
 import { buyPackage } from "../src/lib/orders";
 import { setSetting } from "../src/lib/settings";
+import { assertTestDb } from "./guard";
 
 async function main() {
+  assertTestDb();
   const user = await prisma.user.findUnique({ where: { email: "demo@bnttopup.local" } });
   if (!user) throw new Error("no demo user");
   const userId = user.id;

@@ -26,7 +26,7 @@ function destOf(formData: FormData, fallback: string): string {
 }
 
 export async function toggleGameAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const g = await prisma.game.findUnique({ where: { id } });
   if (!g) backErr("/admin/games", "Không thấy game");
@@ -37,7 +37,7 @@ export async function toggleGameAction(formData: FormData) {
 }
 
 export async function saveGameMetaAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = Number(formData.get("gameId") ?? 0);
   if (!gameId) backErr("/admin/games", "Thiếu game");
   const data: { genre?: string; description?: string } = {};
@@ -51,7 +51,7 @@ export async function saveGameMetaAction(formData: FormData) {
 }
 
 export async function createGameAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
   const slug = String(formData.get("slug") ?? "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const cover = String(formData.get("cover") ?? "").trim();
@@ -73,7 +73,7 @@ export async function createGameAction(formData: FormData) {
 }
 
 export async function togglePackageAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const gameId = Number(formData.get("gameId"));
   const dest = destOf(formData, `/admin/games/${gameId}`);
@@ -85,7 +85,7 @@ export async function togglePackageAction(formData: FormData) {
 }
 
 export async function createPackageAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = Number(formData.get("gameId"));
   const name = String(formData.get("name") ?? "").trim();
   const price = parseMoneyToCents(String(formData.get("price") ?? ""));
@@ -109,7 +109,7 @@ export async function createPackageAction(formData: FormData) {
 }
 
 export async function setGamePriorityAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = Number(formData.get("gameId"));
   const priority = String(formData.get("priority") ?? "");
   const dest = destOf(formData, `/admin/games/${gameId}`);
@@ -120,7 +120,7 @@ export async function setGamePriorityAction(formData: FormData) {
 }
 
 export async function approveCompareAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = Number(formData.get("gameId"));
   const kind = String(formData.get("kind") ?? "");
   const dest = destOf(formData, "/admin/compare");
@@ -132,7 +132,7 @@ export async function approveCompareAction(formData: FormData) {
 }
 
 export async function saveUidGuideAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = Number(formData.get("gameId"));
   const { textToGuide } = await import("@/lib/guide");
   const steps = textToGuide(String(formData.get("guide") ?? ""));
@@ -142,7 +142,7 @@ export async function saveUidGuideAction(formData: FormData) {
 }
 
 export async function setOrderStatusAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const status = String(formData.get("status") ?? "");
   const allowed = ["PENDING", "PROCESSING", "PARTIAL", "DELIVERED", "FAILED", "CANCELLED"];
@@ -232,7 +232,7 @@ export async function adjustBalanceAction(formData: FormData) {
 }
 
 export async function toggleUserAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const u = await prisma.user.findUnique({ where: { id } });
   if (!u || u.role === "ADMIN") backErr("/admin/users", "Không khoá được tài khoản này");
@@ -410,7 +410,7 @@ export async function testGatewayAction(formData: FormData) {
 }
 
 export async function createDiscountAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const percent = Math.min(90, Math.max(1, Number(formData.get("percent") ?? 0) || 0));
   if (!code || !percent) backErr("/admin/discounts", "Thiếu mã hoặc % giảm");
@@ -422,7 +422,7 @@ export async function createDiscountAction(formData: FormData) {
 }
 
 export async function toggleDiscountAction(formData: FormData) {
-  await requireAdmin();
+  await requireOwner();
   const id = Number(formData.get("id"));
   const d = await prisma.discountCode.findUnique({ where: { id } });
   if (!d) backErr("/admin/discounts", "Không thấy mã");
@@ -472,7 +472,7 @@ export async function deleteCurrencyAction(formData: FormData) {
 }
 
 export async function saveLanguagesAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const en = formData.get("lang_en_enabled") === "1" ? "1" : "0";
   const def = String(formData.get("lang_default") ?? "vi");
   await setSetting("lang_en_enabled", en);
@@ -482,7 +482,7 @@ export async function saveLanguagesAction(formData: FormData) {
 }
 
 export async function saveAllPackagesAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = Number(formData.get("gameId") ?? 0);
   const dest = destOf(formData, gameId ? `/admin/games/${gameId}/packages` : "/admin/games");
   const ids = String(formData.get("ids") ?? "").split(",").map((x) => Number(x)).filter(Boolean);
@@ -514,7 +514,7 @@ export async function saveAllPackagesAction(formData: FormData) {
 }
 
 export async function deletePackageAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = Number(formData.get("id"));
   const gameId = Number(formData.get("gameId"));
   const dest = destOf(formData, `/admin/games/${gameId}`);
@@ -640,7 +640,7 @@ export async function deleteVipTierAction(formData: FormData) {
 }
 
 export async function uploadTierIconAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const tierId = parseInt(String(formData.get("tierId") ?? ""), 10) || 0;
   const tier = await prisma.vipTier.findUnique({ where: { id: tierId } });
   if (!tier) backErr("/admin/vip", "Không tìm thấy cấp VIP");
@@ -663,7 +663,7 @@ export async function uploadTierIconAction(formData: FormData) {
 
 
 export async function saveGameBannerAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = parseInt(String(formData.get("gameId") ?? ""), 10) || 0;
   const game = await prisma.game.findUnique({ where: { id: gameId } });
   if (!game) backErr("/admin/games", "Không tìm thấy game");
@@ -674,7 +674,7 @@ export async function saveGameBannerAction(formData: FormData) {
 }
 
 export async function uploadGameBannerAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const gameId = parseInt(String(formData.get("gameId") ?? ""), 10) || 0;
   const game = await prisma.game.findUnique({ where: { id: gameId } });
   if (!game) backErr("/admin/games", "Không tìm thấy game");
@@ -697,7 +697,7 @@ export async function uploadGameBannerAction(formData: FormData) {
 }
 
 export async function removeTierIconAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const tierId = parseInt(String(formData.get("tierId") ?? ""), 10) || 0;
   const tier = await prisma.vipTier.findUnique({ where: { id: tierId } });
   if (!tier) backErr("/admin/vip", "Không tìm thấy cấp VIP");
@@ -707,7 +707,7 @@ export async function removeTierIconAction(formData: FormData) {
 }
 
 export async function saveFacebookLoginAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const { sealSecret } = await import("@/lib/gateways");
   await setSetting("fb_login_enabled", formData.get("fb_login_enabled") === "1" ? "1" : "0");
   await setSetting("fb_app_id", String(formData.get("fb_app_id") ?? "").trim());
@@ -718,7 +718,7 @@ export async function saveFacebookLoginAction(formData: FormData) {
 }
 
 export async function saveSmtpAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const { sealSecret } = await import("@/lib/gateways");
   await setSetting("smtp_host", String(formData.get("smtp_host") ?? "").trim());
   await setSetting("smtp_port", String(parseInt(String(formData.get("smtp_port") ?? "587"), 10) || 587));
@@ -732,7 +732,7 @@ export async function saveSmtpAction(formData: FormData) {
 }
 
 export async function testSmtpAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const to = String(formData.get("test_email") ?? "").trim() || admin.email;
   const { isMailConfigured, sendMail } = await import("@/lib/mailer");
   if (!(await isMailConfigured())) backErr("/admin/website?tab=email", "Chưa đủ cấu hình SMTP (cần host, tài khoản và mật khẩu)");
@@ -743,7 +743,7 @@ export async function testSmtpAction(formData: FormData) {
 }
 
 export async function saveGoogleLoginAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const { sealSecret } = await import("@/lib/gateways");
   await setSetting("google_login_enabled", formData.get("google_login_enabled") === "1" ? "1" : "0");
   await setSetting("google_client_id", String(formData.get("google_client_id") ?? "").trim());
@@ -769,7 +769,7 @@ async function saveUploadedImage(file: File, prefix: string): Promise<string | n
 }
 
 export async function saveContactWidgetAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = parseInt(String(formData.get("id") ?? ""), 10) || 0;
   const name = String(formData.get("name") ?? "").trim();
   const link = String(formData.get("link") ?? "").trim();
@@ -790,7 +790,7 @@ export async function saveContactWidgetAction(formData: FormData) {
 }
 
 export async function toggleContactWidgetAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = parseInt(String(formData.get("id") ?? ""), 10) || 0;
   const w = await prisma.contactWidget.findUnique({ where: { id } });
   if (!w) backErr("/admin/widgets", "Không tìm thấy kênh liên hệ");
@@ -800,7 +800,7 @@ export async function toggleContactWidgetAction(formData: FormData) {
 }
 
 export async function deleteContactWidgetAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   const id = parseInt(String(formData.get("id") ?? ""), 10) || 0;
   const w = await prisma.contactWidget.findUnique({ where: { id } });
   if (!w) backErr("/admin/widgets", "Không tìm thấy kênh liên hệ");
@@ -810,7 +810,7 @@ export async function deleteContactWidgetAction(formData: FormData) {
 }
 
 export async function saveWebsiteInfoAction(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireOwner();
   for (const key of ["site_name", "site_url", "support_email", "site_tagline", "admin_entry_url"]) {
     await setSetting(key, String(formData.get(key) ?? "").trim());
   }

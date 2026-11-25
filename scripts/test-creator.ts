@@ -4,6 +4,7 @@ import {
   reverseCreatorCommissionForOrder, releaseDueCommissions, creatorBalances,
   requestPayout, markPayoutPaid, refreshCreatorLevel,
 } from "../src/lib/creator";
+import { assertTestDb } from "./guard";
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, extra = "") {
@@ -23,6 +24,7 @@ async function mkOrder(userId: number, totalCents: number, promoCode?: string) {
 }
 
 async function main() {
+  assertTestDb();
   await ensureCreatorLevels();
   const levels = await prisma.creatorLevel.findMany({ orderBy: { sort: "asc" } });
   check("seed 4 levels", levels.length === 4 && levels[0].rateBps === 200 && levels[3].rateBps === 700);

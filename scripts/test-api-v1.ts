@@ -1,5 +1,6 @@
 import { prisma } from "../src/lib/db";
 import { createApiKey } from "../src/lib/apikeys";
+import { assertTestDb } from "./guard";
 
 const BASE = "http://localhost:3107/api/v1";
 async function call(path: string, key?: string, init?: RequestInit) {
@@ -14,6 +15,7 @@ async function call(path: string, key?: string, init?: RequestInit) {
 }
 
 async function main() {
+  assertTestDb();
   const demo = await prisma.user.findUnique({ where: { email: "demo@bnttopup.local" } });
   if (!demo) throw new Error("thiếu user demo");
   await prisma.user.update({ where: { id: demo.id }, data: { balanceCents: 100000 } });

@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { unstable_rethrow } from "next/dist/client/components/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireOwner } from "@/lib/auth";
 import { audit } from "@/lib/settings";
 
 const back = (q: string): never => redirect("/admin/flash-sales?" + q);
@@ -10,7 +10,7 @@ const ok = (m: string): never => back("msg=" + encodeURIComponent(m));
 const err = (m: string): never => back("err=" + encodeURIComponent(m));
 
 export async function createSaleAction(formData: FormData) {
-  const admin = await requireAdmin().catch(() => null);
+  const admin = await requireOwner().catch(() => null);
   if (!admin) err("Không có quyền");
   try {
     const name = String(formData.get("name") ?? "").trim();
@@ -28,7 +28,7 @@ export async function createSaleAction(formData: FormData) {
 }
 
 export async function toggleSaleAction(formData: FormData) {
-  const admin = await requireAdmin().catch(() => null);
+  const admin = await requireOwner().catch(() => null);
   if (!admin) err("Không có quyền");
   const id = Number(formData.get("id"));
   const active = String(formData.get("active")) === "1";
@@ -38,7 +38,7 @@ export async function toggleSaleAction(formData: FormData) {
 }
 
 export async function deleteSaleAction(formData: FormData) {
-  const admin = await requireAdmin().catch(() => null);
+  const admin = await requireOwner().catch(() => null);
   if (!admin) err("Không có quyền");
   const id = Number(formData.get("id"));
   await prisma.flashSale.delete({ where: { id } });
@@ -47,7 +47,7 @@ export async function deleteSaleAction(formData: FormData) {
 }
 
 export async function addItemAction(formData: FormData) {
-  const admin = await requireAdmin().catch(() => null);
+  const admin = await requireOwner().catch(() => null);
   if (!admin) err("Không có quyền");
   try {
     const flashSaleId = Number(formData.get("flashSaleId"));
@@ -68,7 +68,7 @@ export async function addItemAction(formData: FormData) {
 }
 
 export async function deleteItemAction(formData: FormData) {
-  const admin = await requireAdmin().catch(() => null);
+  const admin = await requireOwner().catch(() => null);
   if (!admin) err("Không có quyền");
   const id = Number(formData.get("id"));
   await prisma.flashSaleItem.delete({ where: { id } });

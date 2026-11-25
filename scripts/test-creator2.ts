@@ -3,6 +3,7 @@ import {
   ensureCreatorLevels, setAttribution, awardCreatorCommissionForOrder,
   creatorBalances, requestPayout, runCreatorMigration, ensureLegacyCreator,
 } from "../src/lib/creator";
+import { assertTestDb } from "./guard";
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, extra = "") {
@@ -11,6 +12,7 @@ function check(name: string, cond: boolean, extra = "") {
 }
 
 async function main() {
+  assertTestDb();
   await ensureCreatorLevels();
   const levels = await prisma.creatorLevel.findMany({ orderBy: { sort: "asc" } });
   const gold = levels.find((l) => l.name === "Gold")!;

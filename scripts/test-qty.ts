@@ -2,6 +2,7 @@ import http from "node:http";
 import { prisma } from "../src/lib/db";
 import { encryptSecret } from "../src/lib/crypto";
 import { buyPackage } from "../src/lib/orders";
+import { assertTestDb } from "./guard";
 
 let calls = 0;
 let failFrom = Number.MAX_SAFE_INTEGER;
@@ -27,6 +28,7 @@ async function balance(userId: number) {
 }
 
 async function main() {
+  assertTestDb();
   await new Promise<void>((r) => server.listen(3999, r));
   const user = await prisma.user.findUnique({ where: { email: "demo@bnttopup.local" } });
   if (!user) throw new Error("no demo user");

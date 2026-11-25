@@ -62,7 +62,7 @@ export default function BuyPanel({ slug, cover, packages, fields, methodFields, 
 
   return (
     <form action={buyAction} className="buy-layout">
-        <ClientRefInput />
+        <ClientRefInput scope="buy-panel" />
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="packageId" value={activePkg?.id ?? ""} />
       <div>

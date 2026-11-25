@@ -1,7 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { prisma } from "../src/lib/db";
 import { makeSessionToken } from "../src/lib/crypto";
+import { assertTestDb } from "./guard";
 async function main() {
+  assertTestDb();
   const admin = await prisma.user.findUnique({ where: { email: "admin@bnttopup.local" } });
   const demo = await prisma.user.findUnique({ where: { email: "demo@bnttopup.local" } });
   if (!admin || !demo) throw new Error("thiếu user seed");

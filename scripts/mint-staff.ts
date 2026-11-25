@@ -1,7 +1,9 @@
 import { prisma } from "../src/lib/db";
 import { makeSessionToken } from "../src/lib/crypto";
 import { writeFileSync } from "node:fs";
+import { assertTestDb } from "./guard";
 async function main() {
+  assertTestDb();
   const staff = await prisma.user.upsert({
     where: { email: "staff@bnttopup.local" },
     create: { email: "staff@bnttopup.local", name: "Nhân viên test", passwordHash: "x", role: "STAFF", balanceCents: 0 },

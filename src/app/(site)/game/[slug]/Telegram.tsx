@@ -97,7 +97,7 @@ export default function Telegram({
 
   return (
     <form action={buyTelegramAction} className="buy-layout">
-        <ClientRefInput />
+        <ClientRefInput scope="telegram" />
       <input type="hidden" name="kind" value={tab} />
       <input type="hidden" name="itemKey" value={activePkg?.itemKey ?? ""} />
       <div>

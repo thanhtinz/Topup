@@ -1,5 +1,7 @@
 import { prisma } from "../src/lib/db";
 import { issueEmailCode, verifyEmailCode, peekEmailCodePayload } from "../src/lib/emailcodes";
+import { assertTestDb } from "./guard";
+assertTestDb();
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean) {
